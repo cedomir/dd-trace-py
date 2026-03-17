@@ -6,8 +6,3 @@ fixes:
     now correctly links the greenlets to their parent task. Additionally, greenlets
     joined via ``gevent.joinall`` or ``gevent.wait`` from a user-level greenlet are
     now attributed to that greenlet instead of always being attributed to the Hub.
-  - |
-    profiling: Fixes a ``KeyError`` in greenlet untracking when a parent greenlet
-    is untracked before its linked children. Previously, untracking a child after
-    its parent had already been untracked would raise ``KeyError`` in the rawlink
-    callback, causing gevent to log spurious errors.

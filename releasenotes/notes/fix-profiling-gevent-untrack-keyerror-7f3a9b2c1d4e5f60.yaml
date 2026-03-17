@@ -1,0 +1,7 @@
+---
+fixes:
+  - |
+    profiling: Fixes a ``KeyError`` in greenlet untracking when a parent greenlet
+    is untracked before its linked children. Previously, untracking a child after
+    its parent had already been untracked would raise ``KeyError`` in the rawlink
+    callback, causing gevent to log spurious errors.
