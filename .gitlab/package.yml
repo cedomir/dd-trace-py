@@ -42,12 +42,16 @@ variables:
     KUBERNETES_MEMORY_REQUEST: "10Gi"
     KUBERNETES_MEMORY_LIMIT: "10Gi"
     DD_DISABLE_VPA: true
+  after_script:
+    - cd ${CI_PROJECT_DIR} && bash .gitlab/scripts/generate-core-backtraces.sh || true
   artifacts:
+    when: always
     paths:
       - "pywheels/*.whl"
       - "pywheels/*.tar.gz"
       - "debugwheelhouse/*.log"
       - "debugwheelhouse/*.zip"
+      - "core.*"
   cache:
     - key: v1-download-cache-${CURRENT_YEAR}-${CURRENT_BIWEEK}
       paths:
@@ -217,11 +221,21 @@ variables:
     - job: "build sdist"
       artifacts: true
   script:
+    - ulimit -c unlimited || true
     - SDIST_FILE=$(ls ${CI_PROJECT_DIR}/pywheels/*.tar.gz | head -n 1)
     - TMP_DIR=$(mktemp -d) && cd $TMP_DIR
     - twine check ${SDIST_FILE}
     - pip install ${SDIST_FILE}
-    - python ${CI_PROJECT_DIR}/tests/smoke_test.py
+    - smoke_rc=0
+    - python ${CI_PROJECT_DIR}/tests/smoke_test.py || smoke_rc=$?
+    - cp core.* ${CI_PROJECT_DIR}/ 2>/dev/null || true
+    - exit $smoke_rc
+  after_script:
+    - cd ${CI_PROJECT_DIR} && bash .gitlab/scripts/generate-core-backtraces.sh || true
+  artifacts:
+    when: always
+    paths:
+      - "core.*"
 
 "download windows wheels":
   image: registry.ddbuild.io/images/dd-octo-sts-ci-base:2025.06-1

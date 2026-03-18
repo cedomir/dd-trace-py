@@ -176,6 +176,25 @@ test_wheel() {
   "${VENV_PATH}/bin/python" -c "import ddtrace; print('✓ ddtrace import successful')" || echo "✗ ddtrace import failed"
 
   echo "=== Running smoke test ==="
-  "${VENV_PATH}/bin/python" "${PROJECT_DIR}/tests/smoke_test.py"
+  ulimit -c unlimited || true
+  local smoke_rc=0
+  "${VENV_PATH}/bin/python" "${PROJECT_DIR}/tests/smoke_test.py" || smoke_rc=$?
+
+  # Collect core dumps for artifact upload / backtrace generation
+  if ls core.* 1>/dev/null 2>&1; then
+    echo "=== Core dumps found in $(pwd) ==="
+    ls -l core.*
+    cp core.* "${PROJECT_DIR}/" || true
+  fi
+  if [[ "$(uname -s)" == "Darwin" ]] && ls /cores/core.* 1>/dev/null 2>&1; then
+    echo "=== Core dumps found in /cores/ ==="
+    ls -l /cores/core.*
+    cp /cores/core.* "${PROJECT_DIR}/" || true
+  fi
+
   section_end "test_wheel"
+  if [ $smoke_rc -ne 0 ]; then
+    echo "Smoke test failed with exit code $smoke_rc"
+    exit $smoke_rc
+  fi
 }
