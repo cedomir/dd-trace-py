@@ -106,6 +106,9 @@ IAST_DIR = HERE / "ddtrace" / "appsec" / "_iast" / "_taint_tracking"
 DDUP_DIR = HERE / "ddtrace" / "internal" / "datadog" / "profiling" / "ddup"
 STACK_DIR = HERE / "ddtrace" / "internal" / "datadog" / "profiling" / "stack"
 NATIVE_CRATE = HERE / "src" / "native"
+DDTRACE_DIR = HERE / "ddtrace"
+# Vendored binaries are not built by setup.py and must not be removed by clean
+VENDOR_DIR = HERE / "ddtrace" / "vendor"
 CARGO_TARGET_DIR = NATIVE_CRATE.absolute() / f"target{sys.version_info.major}.{sys.version_info.minor}"
 DD_CARGO_ARGS = shlex.split(os.getenv("DD_CARGO_ARGS", ""))
 
@@ -599,19 +602,33 @@ class LibraryDownloader(BuildPyCommand):
 
 class CleanLibraries(CleanCommand):
     @staticmethod
+    def remove_native_extensions():
+        """Remove native extensions and shared libraries installed by setup.py."""
+        for pattern in ("*.so", "*.pyd", "*.dylib", "*.dll"):
+            for path in DDTRACE_DIR.rglob(pattern):
+                # Avoid modifying vendored directories
+                if path.is_file() and not path.is_relative_to(VENDOR_DIR):
+                    try:
+                        path.unlink()
+                    except OSError as e:
+                        print(f"WARNING: could not remove {path}: {e}")
+
+    @staticmethod
     def remove_artifacts():
         shutil.rmtree(LIBDDWAF_DOWNLOAD_DIR, True)
-        shutil.rmtree(IAST_DIR / "*.so", True)
+        CleanLibraries.remove_native_extensions()
+        # CMake FetchContent cache can become corrupted and cause build failures on reinstall
+        cmake_deps = LibraryDownload.CACHE_DIR / "_cmake_deps"
+        if cmake_deps.exists():
+            shutil.rmtree(cmake_deps, True)
 
     @staticmethod
     def remove_rust():
-        """Clean the Rust crate using cargo clean."""
-        if CARGO_TARGET_DIR.exists():
-            subprocess.run(
-                ["cargo", "clean"],
-                cwd=str(NATIVE_CRATE),
-                check=True,
-            )
+        """Remove all versioned Rust target dirs (target3.9, target3.10, etc.)."""
+        # rmtree is a superset of `cargo clean`; tighter glob avoids unrelated dirs
+        for target_dir in NATIVE_CRATE.glob("target[0-9]*"):
+            if target_dir.is_dir():
+                shutil.rmtree(target_dir, True)
 
     def run(self):
         CleanLibraries.remove_rust()
