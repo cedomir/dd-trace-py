@@ -11,6 +11,28 @@ section_end() {
 }
 
 
+_collect_core_dumps() {
+  local dest_dir="${1:-.}"
+  local found=0
+  # Search common locations for core dumps
+  local search_dirs=("." "/tmp" "/var/lib/systemd/coredump")
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    search_dirs+=("/cores")
+  fi
+  for dir in "${search_dirs[@]}"; do
+    [ -d "$dir" ] || continue
+    while IFS= read -r -d '' core_file; do
+      echo "=== Core dump found: ${core_file} ==="
+      ls -l "$core_file"
+      cp "$core_file" "${dest_dir}/" 2>/dev/null || true
+      found=1
+    done < <(find "$dir" -maxdepth 1 -name "core*" -type f -size +0 -print0 2>/dev/null)
+  done
+  if [ $found -eq 0 ]; then
+    echo "No core dumps found"
+  fi
+}
+
 # Setup Rust (verify/install if needed)
 setup_rust() {
   section_start "install_rust" "Rust toolchain"
@@ -177,20 +199,15 @@ test_wheel() {
 
   echo "=== Running smoke test ==="
   ulimit -c unlimited || true
+  # Force core dumps to be written as files in CWD (not piped to systemd-coredump, etc.)
+  if [[ "$(uname -s)" == "Linux" ]]; then
+    echo "core.%e.%p" > /proc/sys/kernel/core_pattern 2>/dev/null || true
+  fi
   local smoke_rc=0
   "${VENV_PATH}/bin/python" "${PROJECT_DIR}/tests/smoke_test.py" || smoke_rc=$?
 
   # Collect core dumps for artifact upload / backtrace generation
-  if ls core.* 1>/dev/null 2>&1; then
-    echo "=== Core dumps found in $(pwd) ==="
-    ls -l core.*
-    cp core.* "${PROJECT_DIR}/" || true
-  fi
-  if [[ "$(uname -s)" == "Darwin" ]] && ls /cores/core.* 1>/dev/null 2>&1; then
-    echo "=== Core dumps found in /cores/ ==="
-    ls -l /cores/core.*
-    cp /cores/core.* "${PROJECT_DIR}/" || true
-  fi
+  _collect_core_dumps "${PROJECT_DIR}"
 
   section_end "test_wheel"
   if [ $smoke_rc -ne 0 ]; then

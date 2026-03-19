@@ -231,13 +231,14 @@ variables:
       artifacts: true
   script:
     - ulimit -c unlimited || true
+    - echo "core.%e.%p" > /proc/sys/kernel/core_pattern 2>/dev/null || true
     - SDIST_FILE=$(ls ${CI_PROJECT_DIR}/pywheels/*.tar.gz | head -n 1)
     - TMP_DIR=$(mktemp -d) && cd $TMP_DIR
     - twine check ${SDIST_FILE}
     - pip install ${SDIST_FILE}
     - smoke_rc=0
     - python ${CI_PROJECT_DIR}/tests/smoke_test.py || smoke_rc=$?
-    - cp core.* ${CI_PROJECT_DIR}/ 2>/dev/null || true
+    - find . /tmp /cores /var/lib/systemd/coredump -maxdepth 1 -name "core*" -type f -size +0 -exec cp {} ${CI_PROJECT_DIR}/ \; 2>/dev/null || true
     - exit $smoke_rc
   after_script:
     - cd ${CI_PROJECT_DIR} && bash .gitlab/scripts/generate-core-backtraces.sh || true
