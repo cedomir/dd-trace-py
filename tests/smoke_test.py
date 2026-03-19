@@ -78,7 +78,10 @@ if __name__ == "__main__":
     # Profiling smoke test
     if platform.system() in ("Linux", "Darwin") and sys.maxsize > (1 << 32):
         print("Running profiling smoke test...")
-        profiling_cmd = [sys.executable, "-c", "import ddtrace.profiling.auto"]
+        profiling_cmd = [sys.executable, "-X", "faulthandler", "-c", "import ddtrace.profiling.auto"]
         result = subprocess.run(profiling_cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"Profiling smoke test stdout:\n{result.stdout}")
+            print(f"Profiling smoke test stderr:\n{result.stderr}")
         assert result.returncode == 0, f"Failed: {result.returncode}, {result.stdout}, {result.stderr}"
         print("Profiling smoke test completed successfully")
