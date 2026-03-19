@@ -14,6 +14,11 @@ section_end() {
 _collect_core_dumps() {
   local dest_dir="${1:-.}"
   local found=0
+
+  if [[ "$(uname -s)" == "Linux" ]]; then
+    echo "core_pattern: $(cat /proc/sys/kernel/core_pattern 2>/dev/null || echo '<unreadable>')"
+  fi
+
   # Search common locations for core dumps
   local search_dirs=("." "/tmp" "/var/lib/systemd/coredump")
   if [[ "$(uname -s)" == "Darwin" ]]; then
@@ -28,6 +33,16 @@ _collect_core_dumps() {
       found=1
     done < <(find "$dir" -maxdepth 1 -name "core*" -type f -size +0 -print0 2>/dev/null)
   done
+
+  # Try coredumpctl as fallback (systemd-coredump environments)
+  if [ $found -eq 0 ] && command -v coredumpctl &>/dev/null; then
+    echo "=== Trying coredumpctl ==="
+    coredumpctl list 2>/dev/null || true
+    # Dump the most recent core to dest_dir
+    coredumpctl dump -o "${dest_dir}/core.coredumpctl" 2>/dev/null || true
+    [ -s "${dest_dir}/core.coredumpctl" ] && found=1
+  fi
+
   if [ $found -eq 0 ]; then
     echo "No core dumps found"
   fi
@@ -199,10 +214,6 @@ test_wheel() {
 
   echo "=== Running smoke test ==="
   ulimit -c unlimited || true
-  # Force core dumps to be written as files in CWD (not piped to systemd-coredump, etc.)
-  if [[ "$(uname -s)" == "Linux" ]]; then
-    echo "core.%e.%p" > /proc/sys/kernel/core_pattern 2>/dev/null || true
-  fi
   local smoke_rc=0
   "${VENV_PATH}/bin/python" "${PROJECT_DIR}/tests/smoke_test.py" || smoke_rc=$?
 

@@ -231,7 +231,6 @@ variables:
       artifacts: true
   script:
     - ulimit -c unlimited || true
-    - echo "core.%e.%p" > /proc/sys/kernel/core_pattern 2>/dev/null || true
     - SDIST_FILE=$(ls ${CI_PROJECT_DIR}/pywheels/*.tar.gz | head -n 1)
     - TMP_DIR=$(mktemp -d) && cd $TMP_DIR
     - twine check ${SDIST_FILE}
