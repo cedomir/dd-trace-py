@@ -94,6 +94,31 @@ def test_rule_init_via_env_no_name_or_service():
         assert get_span_sampling_rules() == []
 
 
+def test_rule_init_via_env_no_name_or_service_logs_warning_and_continues(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Malformed rule (no service/name) should be skipped with a warning; subsequent valid rules
+    must still be parsed.
+    """
+    rules_json = '[{"sample_rate":1.0}, {"service":"my-service","name":"my-op","sample_rate":0.5}]'
+    with override_global_config(dict(_sampling_rules=rules_json)):
+        sampling_rules = get_span_sampling_rules()
+        sampling_records = [r for r in caplog.record_tuples if r[0] == "ddtrace.internal.sampling"]
+        assert sampling_records == [
+            (
+                "ddtrace.internal.sampling",
+                30,
+                "Sampling rules must supply at least 'service' or 'name', got {\"sample_rate\": 1.0}",
+            )
+        ]
+        assert len(sampling_rules) == 1
+        assert sampling_rules[0]._service_matcher is not None
+        assert sampling_rules[0]._service_matcher.pattern == "my-service"
+        assert sampling_rules[0]._name_matcher is not None
+        assert sampling_rules[0]._name_matcher.pattern == "my-op"
+        assert sampling_rules[0]._sample_rate == 0.5
+
+
 def test_rule_init_via_env_service_pattern_contains_unsupported_char():
     with override_global_config(dict(_sampling_rules='[{"service":"h[!a]i"}]')):
         assert get_span_sampling_rules() == []
